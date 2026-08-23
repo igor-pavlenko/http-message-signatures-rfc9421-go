@@ -25,7 +25,7 @@ A complete Go implementation of [RFC 9421 HTTP Message Signatures](https://datat
 go get github.com/igor-pavlenko/http-message-signatures-rfc9421-go
 ```
 
-**Requires:** Go 1.21+
+**Requires:** Go 1.25+
 
 ## Quick Start
 
@@ -221,7 +221,7 @@ func main() {
 
     key := []byte("0123456789abcdef0123456789abcdef")
     alg, _ := signing.GetAlgorithm(algID)
-    sig, _ := alg.Sign(sigBase, key)
+    sig, _ := alg.Sign([]byte(sigBase), key)
 
     sigInputDict := &sfv.Dictionary{
         Keys: []string{"sig1"},
@@ -305,7 +305,7 @@ func VerifyRequest(req *http.Request, key []byte) error {
         algID = *sig.SignatureParams.Algorithm
     }
     alg, _ := signing.GetAlgorithm(algID)
-    return alg.Verify(sigBase, sig.SignatureValue, key)
+    return alg.Verify([]byte(sigBase), sig.SignatureValue, key)
 }
 ```
 
@@ -430,7 +430,7 @@ Parses `Signature-Input` and `Signature` header values into structured data.
 ### base.Build
 
 ```go
-func Build(msg HTTPMessage, components []parser.ComponentIdentifier, params parser.SignatureParams) ([]byte, error)
+func Build(msg HTTPMessage, components []parser.ComponentIdentifier, params parser.SignatureParams) (string, error)
 ```
 
 Constructs the canonical signature base per RFC 9421 Section 2.5.

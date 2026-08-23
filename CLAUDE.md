@@ -4,7 +4,7 @@ Zero-dependency implementation of RFC 9421 HTTP Message Signatures with RFC 8941
 
 ## Technology Stack
 
-- **Go**: 1.21+ (uses generics and modern stdlib features)
+- **Go**: 1.25+ (uses generics and modern stdlib features)
 - **External Dependencies**: `golang.org/x/crypto` only (for SHA-3, BLAKE2b in digest package)
 - **No Runtime Dependencies**: All packages except `pkg/digest` are zero-dependency
 
@@ -16,7 +16,8 @@ pkg/
 ├── parser/       # RFC 9421 Signature-Input/Signature header parser
 ├── base/         # Signature base construction
 ├── signing/      # Cryptographic algorithms (RSA, ECDSA, Ed25519, HMAC)
-└── digest/       # Content-Digest header (SHA-2, SHA-3, BLAKE2b)
+├── digest/       # Content-Digest header (SHA-2, SHA-3, BLAKE2b)
+└── httpsig/      # High-level Sign/Verify API
 ```
 
 ### Package Descriptions
@@ -28,6 +29,7 @@ pkg/
 | `pkg/base` | Build signature base from HTTP messages | `pkg/sfv`, `pkg/parser` |
 | `pkg/signing` | Sign/verify with RFC 9421 algorithms | `crypto/*` stdlib |
 | `pkg/digest` | Content-Digest header support | `golang.org/x/crypto` |
+| `pkg/httpsig` | High-level Signer/Verifier helpers | `pkg/base`, `pkg/parser`, `pkg/signing`, `pkg/sfv` |
 
 ## Commands
 
@@ -62,9 +64,9 @@ goimports -w .
 
 - Follow Go standard conventions (gofmt, goimports)
 - golangci-lint configuration in `.golangci.yml`:
-  - Max function length: 80 lines / 50 statements
-  - Max cyclomatic complexity: 15
-  - Max nesting depth: 5
+  - Max function length: 120 lines / 80 statements
+  - Max cyclomatic complexity: 35
+  - Max nested-if complexity: 16
 - Error strings: lowercase, no punctuation
 - Variable naming: camelCase, acronyms uppercase (HTTP, URL, ID)
 - Package comments required on all exported packages
@@ -82,10 +84,10 @@ goimports -w .
 - RFC 9421 Appendix B test vectors implemented
 
 ### Fuzz Testing
-16 fuzz tests across packages for parser robustness:
-- `pkg/sfv`: Dictionary, InnerList, Parameters, Primitives, BareItem
-- `pkg/parser`: ParseSignatures, ComponentIdentifier validation
-- `pkg/digest`: Content-Digest parsing
+17 fuzz tests across packages for parser robustness:
+- `pkg/sfv`: Dictionary, InnerList, Parameters, List, Primitives (Integer, String, Token, ByteSequence, Boolean), BareItem
+- `pkg/parser`: ParseSignatures (incl. single-header variant), ComponentIdentifier/derived-component/parameter-combination validation
+- `pkg/digest`: Content-Digest parsing (incl. valid-only variant)
 
 ## Supported Algorithms
 
@@ -144,8 +146,8 @@ sigBase, err := base.Build(msg, coveredComponents, signatureParams)
 ### Sign and Verify
 ```go
 alg, _ := signing.GetAlgorithm("rsa-pss-sha512")
-sig, _ := alg.Sign(sigBase, privateKey)
-err := alg.Verify(sigBase, sig, publicKey)
+sig, _ := alg.Sign([]byte(sigBase), privateKey)
+err := alg.Verify([]byte(sigBase), sig, publicKey)
 ```
 
 ### SFV Parsing with Limits
