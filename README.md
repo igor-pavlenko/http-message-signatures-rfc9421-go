@@ -4,7 +4,6 @@
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=igor-pavlenko_http-message-signatures-rfc9421-go&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=igor-pavlenko_http-message-signatures-rfc9421-go)
 [![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=igor-pavlenko_http-message-signatures-rfc9421-go&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=igor-pavlenko_http-message-signatures-rfc9421-go)
 [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=igor-pavlenko_http-message-signatures-rfc9421-go&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=igor-pavlenko_http-message-signatures-rfc9421-go)
-[![Go Report Card](https://goreportcard.com/badge/github.com/igor-pavlenko/http-message-signatures-rfc9421-go)](https://goreportcard.com/report/github.com/igor-pavlenko/http-message-signatures-rfc9421-go)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=igor-pavlenko_http-message-signatures-rfc9421-go&metric=coverage)](https://sonarcloud.io/summary/new_code?id=igor-pavlenko_http-message-signatures-rfc9421-go)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
