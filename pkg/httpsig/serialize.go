@@ -98,7 +98,7 @@ func signatureParamsToSFV(params parser.SignatureParams) []sfv.Parameter {
 	return result
 }
 
-func bareItemToSFV(item parser.BareItem) any {
+func bareItemToSFV(item parser.BareItemValue) any {
 	switch v := item.(type) {
 	case parser.Boolean:
 		return v.Value

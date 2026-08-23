@@ -240,13 +240,13 @@ type SignatureParams struct {
 // Parameter represents a key-value pair for component parameters.
 // Per data-model.md: Component parameters like sf, key, bs, tr, req, name.
 type Parameter struct {
-	Key   string   // Parameter key (e.g., "sf", "key", "req")
-	Value BareItem // Parameter value (bare item from RFC 8941)
+	Key   string        // Parameter key (e.g., "sf", "key", "req")
+	Value BareItemValue // Parameter value (bare item from RFC 8941)
 }
 
-// BareItem represents an RFC 8941 Structured Field Value bare item.
+// BareItemValue represents an RFC 8941 Structured Field Value bare item.
 // This is a union type that can hold different primitive types.
-type BareItem interface {
+type BareItemValue interface {
 	isBareItem()
 }
 
@@ -256,7 +256,7 @@ type Boolean struct {
 }
 
 func (Boolean) isBareItem() {
-	// marker method: seals BareItem to types defined in this package
+	// marker method: seals BareItemValue to types defined in this package
 }
 
 // Integer represents an integer bare item (max 15 digits per RFC 8941).
@@ -265,7 +265,7 @@ type Integer struct {
 }
 
 func (Integer) isBareItem() {
-	// marker method: seals BareItem to types defined in this package
+	// marker method: seals BareItemValue to types defined in this package
 }
 
 // String represents a string bare item (quoted, with escape sequences).
@@ -274,7 +274,7 @@ type String struct {
 }
 
 func (String) isBareItem() {
-	// marker method: seals BareItem to types defined in this package
+	// marker method: seals BareItemValue to types defined in this package
 }
 
 // Token represents a token bare item (unquoted identifier).
@@ -283,7 +283,7 @@ type Token struct {
 }
 
 func (Token) isBareItem() {
-	// marker method: seals BareItem to types defined in this package
+	// marker method: seals BareItemValue to types defined in this package
 }
 
 // ByteSequence represents a byte sequence bare item (:base64:).
@@ -292,5 +292,5 @@ type ByteSequence struct {
 }
 
 func (ByteSequence) isBareItem() {
-	// marker method: seals BareItem to types defined in this package
+	// marker method: seals BareItemValue to types defined in this package
 }

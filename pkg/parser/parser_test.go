@@ -90,7 +90,7 @@ func TestParseSignatures_ComponentParameters(t *testing.T) {
 	for _, param := range firstComp.Parameters {
 		if param.Key == "sf" {
 			hasSF = true
-			// param.Value is a BareItem interface, need to type assert
+			// param.Value is a BareItemValue interface, need to type assert
 			if boolVal, ok := param.Value.(Boolean); !ok || !boolVal.Value {
 				t.Errorf("sf parameter value = %v, want Boolean{true}", param.Value)
 			}

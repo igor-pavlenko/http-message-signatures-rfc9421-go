@@ -129,7 +129,7 @@ func TestSignatureParams_AllFields(t *testing.T) {
 func TestBareItem_Types(t *testing.T) {
 	tests := []struct {
 		name string
-		item BareItem
+		item BareItemValue
 	}{
 		{"Boolean", Boolean{Value: true}},
 		{"Integer", Integer{Value: 42}},

@@ -306,7 +306,7 @@ func parameterEqual(a, b parser.Parameter) bool {
 	return bareItemEqual(a.Value, b.Value)
 }
 
-func bareItemEqual(a, b parser.BareItem) bool {
+func bareItemEqual(a, b parser.BareItemValue) bool {
 	switch av := a.(type) {
 	case parser.Boolean:
 		bv, ok := b.(parser.Boolean)

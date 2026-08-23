@@ -234,8 +234,8 @@ func extractStringParam(key string, value any) (*string, error) {
 	return &val, nil
 }
 
-// convertBareItem converts SFV bare item to parser BareItem interface.
-func convertBareItem(value any) BareItem {
+// convertBareItem converts SFV bare item to parser BareItemValue interface.
+func convertBareItem(value any) BareItemValue {
 	switch v := value.(type) {
 	case bool:
 		return Boolean{Value: v}
