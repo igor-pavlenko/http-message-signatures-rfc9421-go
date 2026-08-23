@@ -11,9 +11,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rsa"
-	"encoding/asn1"
 	"encoding/base64"
-	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
@@ -70,25 +68,6 @@ func loadSharedSecret(t *testing.T) []byte {
 		t.Fatalf("failed to decode shared secret: %v", err)
 	}
 	return secret
-}
-
-// ecdsaFixedToASN1 converts RFC 9421's fixed r||s ECDSA signature format to ASN.1 DER.
-// RFC 9421 Section 3.3.4 specifies: "The signature output is encoded as the two integers
-// r and s, each left-padded to n/2 octets if necessary, concatenated together."
-// Go's crypto/ecdsa uses ASN.1 DER encoding, so we need to convert.
-func ecdsaFixedToASN1(sig []byte) ([]byte, error) {
-	if len(sig) != 64 {
-		return nil, asn1.StructuralError{Msg: "ECDSA P-256 signature must be 64 bytes (r||s format)"}
-	}
-
-	// Split into r and s (32 bytes each for P-256)
-	r := new(big.Int).SetBytes(sig[:32])
-	s := new(big.Int).SetBytes(sig[32:])
-
-	// Encode as ASN.1 DER SEQUENCE { r INTEGER, s INTEGER }
-	return asn1.Marshal(struct {
-		R, S *big.Int
-	}{r, s})
 }
 
 // =============================================================================
@@ -154,8 +133,7 @@ const signatureBaseB26 = `"date": Tue, 20 Apr 2021 02:07:55 GMT
 //
 // NOTE: These are the base64-encoded signatures from the RFC.
 // Non-deterministic algorithms (RSA-PSS, ECDSA) produce different signatures
-// each time. ECDSA B.2.4 signature is kept because it can be verified after
-// converting from RFC's r||s format to Go's ASN.1 DER format.
+// each time, but the RFC's own example signature can still be verified.
 
 // expectedSignatureB24 is the RFC example signature for B.2.4.
 // Algorithm: ecdsa-p256-sha256 (non-deterministic, but verifiable)
@@ -336,9 +314,9 @@ func TestRFC9421_B2_4_SigningResponse(t *testing.T) {
 		t.Fatalf("failed to sign: %v", err)
 	}
 
-	// ECDSA P-256 signatures are DER-encoded, typically 70-72 bytes
-	if len(sig) < 64 || len(sig) > 80 {
-		t.Errorf("unexpected ECDSA signature length: %d", len(sig))
+	// RFC 9421 Section 3.3.4: fixed 64-byte r||s encoding for P-256.
+	if len(sig) != 64 {
+		t.Errorf("unexpected ECDSA signature length: %d, want 64", len(sig))
 	}
 
 	// Verify our generated signature
@@ -346,23 +324,17 @@ func TestRFC9421_B2_4_SigningResponse(t *testing.T) {
 		t.Fatalf("failed to verify our signature: %v", err)
 	}
 
-	// Verify RFC example signature
-	// RFC 9421 uses fixed 64-byte r||s format, but Go uses ASN.1 DER encoding.
-	// Convert the RFC signature from r||s to ASN.1 DER format.
-	rfcSigRaw, err := base64.StdEncoding.DecodeString(expectedSignatureB24)
+	// Verify the RFC's own example signature bytes directly (already r||s).
+	rfcSig, err := base64.StdEncoding.DecodeString(expectedSignatureB24)
 	if err != nil {
 		t.Fatalf("failed to decode RFC signature: %v", err)
 	}
-	rfcSigDER, err := ecdsaFixedToASN1(rfcSigRaw)
-	if err != nil {
-		t.Fatalf("failed to convert RFC signature to ASN.1: %v", err)
-	}
-	if err := alg.Verify(signatureBase, rfcSigDER, pubKey); err != nil {
+	if err := alg.Verify(signatureBase, rfcSig, pubKey); err != nil {
 		t.Fatalf("failed to verify RFC example signature: %v", err)
 	}
 
-	t.Logf("B.2.4: Generated signature length: %d bytes (DER)", len(sig))
-	t.Logf("B.2.4: RFC example signature verified (converted from r||s to DER)")
+	t.Logf("B.2.4: Generated signature length: %d bytes (r||s)", len(sig))
+	t.Logf("B.2.4: RFC example signature verified")
 }
 
 // TestRFC9421_B2_5_SigningRequest_HMAC tests HMAC-SHA256 signature.

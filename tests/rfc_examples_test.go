@@ -395,9 +395,9 @@ func TestRFC9421_AppendixB_2_4_ResponseSignature(t *testing.T) {
 		t.Fatalf("failed to sign: %v", err)
 	}
 
-	// ECDSA P-256 signatures are DER-encoded, typically 70-72 bytes
-	if len(sig) < 64 || len(sig) > 80 {
-		t.Errorf("unexpected ECDSA signature length: %d", len(sig))
+	// RFC 9421 Section 3.3.4: fixed 64-byte r||s encoding for P-256.
+	if len(sig) != 64 {
+		t.Errorf("unexpected ECDSA signature length: %d, want 64", len(sig))
 	}
 
 	// Verify our generated signature
@@ -405,8 +405,7 @@ func TestRFC9421_AppendixB_2_4_ResponseSignature(t *testing.T) {
 		t.Fatalf("failed to verify our signature: %v", err)
 	}
 
-	t.Logf("B.2.4: Generated signature length: %d bytes (DER)", len(sig))
-	t.Logf("B.2.4: RFC example signature verified (converted from r||s to DER)")
+	t.Logf("B.2.4: Generated signature length: %d bytes (r||s)", len(sig))
 }
 
 // RFC 9421 Appendix B.2.5 - Signing a Request Using hmac-sha256

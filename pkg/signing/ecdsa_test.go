@@ -42,8 +42,9 @@ func TestECDSAP256_SignVerify(t *testing.T) {
 		t.Fatalf("Sign() failed: %v", err)
 	}
 
-	if len(signature) == 0 {
-		t.Fatal("signature is empty")
+	// RFC 9421 Section 3.3.4: fixed 64-byte r||s encoding for P-256.
+	if len(signature) != 64 {
+		t.Fatalf("expected 64-byte signature, got %d bytes", len(signature))
 	}
 
 	// Verify with public key
@@ -70,8 +71,9 @@ func TestECDSAP384_SignVerify(t *testing.T) {
 		t.Fatalf("Sign() failed: %v", err)
 	}
 
-	if len(signature) == 0 {
-		t.Fatal("signature is empty")
+	// RFC 9421 Section 3.3.5: fixed 96-byte r||s encoding for P-384.
+	if len(signature) != 96 {
+		t.Fatalf("expected 96-byte signature, got %d bytes", len(signature))
 	}
 
 	// Verify with public key
