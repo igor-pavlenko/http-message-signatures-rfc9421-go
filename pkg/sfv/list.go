@@ -32,35 +32,9 @@ func (p *Parser) ParseList() (*List, error) {
 				len(list.Members)+1, p.limits.MaxDictionaryMembers))
 		}
 
-		// Determine if member is inner list or item
-		var member any
-
-		if p.peek() == '(' {
-			// Inner list
-			items, params, err := p.parseInnerList()
-			if err != nil {
-				return nil, err
-			}
-			member = InnerList{
-				Items:      items,
-				Parameters: params,
-			}
-		} else {
-			// Item
-			itemValue, err := p.parseBareItem()
-			if err != nil {
-				return nil, err
-			}
-
-			itemParams, err := p.parseParameters()
-			if err != nil {
-				return nil, err
-			}
-
-			member = Item{
-				Value:      itemValue,
-				Parameters: itemParams,
-			}
+		member, err := p.parseValue()
+		if err != nil {
+			return nil, err
 		}
 
 		list.Members = append(list.Members, member)
@@ -83,4 +57,34 @@ func (p *Parser) ParseList() (*List, error) {
 	}
 
 	return list, nil
+}
+
+// parseValue parses a single RFC 8941 value, which is either an inner
+// list (parenthesized) or an item. Shared by list and dictionary parsing.
+func (p *Parser) parseValue() (any, error) {
+	if p.peek() == '(' {
+		items, params, err := p.parseInnerList()
+		if err != nil {
+			return nil, err
+		}
+		return InnerList{
+			Items:      items,
+			Parameters: params,
+		}, nil
+	}
+
+	itemValue, err := p.parseBareItem()
+	if err != nil {
+		return nil, err
+	}
+
+	itemParams, err := p.parseParameters()
+	if err != nil {
+		return nil, err
+	}
+
+	return Item{
+		Value:      itemValue,
+		Parameters: itemParams,
+	}, nil
 }

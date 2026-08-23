@@ -188,44 +188,24 @@ func extractSignatureParams(params []sfv.Parameter) (SignatureParams, error) {
 	sp := SignatureParams{}
 
 	for _, param := range params {
+		var err error
 		switch param.Key {
 		case "created":
-			val, ok := param.Value.(int64)
-			if !ok {
-				return sp, fmt.Errorf("parameter 'created' must be an integer, got %T", param.Value)
-			}
-			sp.Created = &val
+			sp.Created, err = extractIntParam(param.Key, param.Value)
 		case "expires":
-			val, ok := param.Value.(int64)
-			if !ok {
-				return sp, fmt.Errorf("parameter 'expires' must be an integer, got %T", param.Value)
-			}
-			sp.Expires = &val
+			sp.Expires, err = extractIntParam(param.Key, param.Value)
 		case "nonce":
-			val, ok := param.Value.(string)
-			if !ok {
-				return sp, fmt.Errorf("parameter 'nonce' must be a string, got %T", param.Value)
-			}
-			sp.Nonce = &val
+			sp.Nonce, err = extractStringParam(param.Key, param.Value)
 		case "alg":
-			val, ok := param.Value.(string)
-			if !ok {
-				return sp, fmt.Errorf("parameter 'alg' must be a string, got %T", param.Value)
-			}
-			sp.Algorithm = &val
+			sp.Algorithm, err = extractStringParam(param.Key, param.Value)
 		case "keyid":
-			val, ok := param.Value.(string)
-			if !ok {
-				return sp, fmt.Errorf("parameter 'keyid' must be a string, got %T", param.Value)
-			}
-			sp.KeyID = &val
+			sp.KeyID, err = extractStringParam(param.Key, param.Value)
 		case "tag":
-			val, ok := param.Value.(string)
-			if !ok {
-				return sp, fmt.Errorf("parameter 'tag' must be a string, got %T", param.Value)
-			}
-			sp.Tag = &val
+			sp.Tag, err = extractStringParam(param.Key, param.Value)
 			// Unknown parameters are ignored per RFC 9421 (extensibility)
+		}
+		if err != nil {
+			return sp, err
 		}
 	}
 
@@ -234,6 +214,24 @@ func extractSignatureParams(params []sfv.Parameter) (SignatureParams, error) {
 	// Note: Verifiers should reject signatures without 'alg' in production use
 
 	return sp, nil
+}
+
+// extractIntParam type-asserts a signature parameter value as an integer.
+func extractIntParam(key string, value any) (*int64, error) {
+	val, ok := value.(int64)
+	if !ok {
+		return nil, fmt.Errorf("parameter '%s' must be an integer, got %T", key, value)
+	}
+	return &val, nil
+}
+
+// extractStringParam type-asserts a signature parameter value as a string.
+func extractStringParam(key string, value any) (*string, error) {
+	val, ok := value.(string)
+	if !ok {
+		return nil, fmt.Errorf("parameter '%s' must be a string, got %T", key, value)
+	}
+	return &val, nil
 }
 
 // convertBareItem converts SFV bare item to parser BareItem interface.

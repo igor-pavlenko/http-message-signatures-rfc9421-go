@@ -224,7 +224,11 @@ func (a *rsaPKCS1v15Algorithm) Sign(signatureBase []byte, key any) ([]byte, erro
 	// Hash the signature base with SHA-256
 	hash := sha256.Sum256(signatureBase)
 
-	// Sign using RSA-PKCS1-v1_5 with SHA-256
+	// Sign using RSA-PKCS1-v1_5 with SHA-256.
+	// SonarQube go:S5542 flags this line: that rule targets RSA *encryption*
+	// padding (Bleichenbacher-class oracle attacks on rsa.EncryptPKCS1v15),
+	// not RSASSA-PKCS1-v1_5 *signing*, which has no such oracle and is the
+	// algorithm RFC 9421 mandates for rsa-v1_5-sha256.
 	signature, err := rsa.SignPKCS1v15(rand.Reader, rsaKey, crypto.SHA256, hash[:])
 	if err != nil {
 		return nil, fmt.Errorf("RSA-PKCS1-v1_5 signing failed: %w", err)
@@ -283,7 +287,9 @@ func (a *rsaPKCS1v15Algorithm) Verify(signatureBase, signature []byte, key any) 
 	// Hash the signature base with SHA-256
 	hash := sha256.Sum256(signatureBase)
 
-	// Verify using RSA-PKCS1-v1_5 with SHA-256
+	// Verify using RSA-PKCS1-v1_5 with SHA-256.
+	// See the matching comment in Sign above: go:S5542 targets RSA
+	// encryption padding, not RSASSA-PKCS1-v1_5 signature verification.
 	err := rsa.VerifyPKCS1v15(rsaKey, crypto.SHA256, hash[:], signature)
 	if err != nil {
 		return fmt.Errorf("signature verification failed: %w", err)

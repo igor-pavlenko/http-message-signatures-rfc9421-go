@@ -53,60 +53,9 @@ func (p *Parser) ParseDictionary() (*Dictionary, error) {
 				len(dict.Keys)+1, p.limits.MaxDictionaryMembers))
 		}
 
-		// Parse key (token)
-		keyToken, err := p.parseToken()
+		key, value, err := p.parseDictionaryMember()
 		if err != nil {
 			return nil, err
-		}
-		key := keyToken.Value
-
-		// RFC 8941: No OWS allowed between key and '=' or between '=' and value
-		// Check for invalid whitespace before '='
-		c := p.peek()
-		if c == ' ' || c == '\t' {
-			return nil, p.newParseError("whitespace not allowed before '=' in dictionary")
-		}
-
-		// Expect '=' or boolean parameter (no OWS allowed per RFC 8941)
-		var value any
-
-		if c == '=' {
-			p.offset++ // consume '='
-
-			// Determine if value is inner list or item
-			if p.peek() == '(' {
-				// Inner list
-				items, params, err := p.parseInnerList()
-				if err != nil {
-					return nil, err
-				}
-				value = InnerList{
-					Items:      items,
-					Parameters: params,
-				}
-			} else {
-				// Item
-				itemValue, err := p.parseBareItem()
-				if err != nil {
-					return nil, err
-				}
-
-				itemParams, err := p.parseParameters()
-				if err != nil {
-					return nil, err
-				}
-
-				value = Item{
-					Value:      itemValue,
-					Parameters: itemParams,
-				}
-			}
-		} else {
-			// Bare key = boolean true item
-			value = Item{
-				Value:      true,
-				Parameters: nil,
-			}
 		}
 
 		// Store value (last instance wins for duplicates)
@@ -134,4 +83,32 @@ func (p *Parser) ParseDictionary() (*Dictionary, error) {
 	}
 
 	return dict, nil
+}
+
+// parseDictionaryMember parses a single "key" or "key=value" dictionary
+// entry per RFC 8941 Section 4.2.2.
+func (p *Parser) parseDictionaryMember() (string, any, error) {
+	keyToken, err := p.parseToken()
+	if err != nil {
+		return "", nil, err
+	}
+	key := keyToken.Value
+
+	// RFC 8941: No OWS allowed between key and '=' or between '=' and value
+	c := p.peek()
+	if c == ' ' || c == '\t' {
+		return "", nil, p.newParseError("whitespace not allowed before '=' in dictionary")
+	}
+
+	if c != '=' {
+		// Bare key = boolean true item
+		return key, Item{Value: true, Parameters: nil}, nil
+	}
+
+	p.offset++ // consume '='
+	value, err := p.parseValue()
+	if err != nil {
+		return "", nil, err
+	}
+	return key, value, nil
 }

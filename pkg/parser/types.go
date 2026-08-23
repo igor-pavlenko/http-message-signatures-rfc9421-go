@@ -255,32 +255,42 @@ type Boolean struct {
 	Value bool
 }
 
-func (Boolean) isBareItem() {}
+func (Boolean) isBareItem() {
+	// marker method: seals BareItem to types defined in this package
+}
 
 // Integer represents an integer bare item (max 15 digits per RFC 8941).
 type Integer struct {
 	Value int64
 }
 
-func (Integer) isBareItem() {}
+func (Integer) isBareItem() {
+	// marker method: seals BareItem to types defined in this package
+}
 
 // String represents a string bare item (quoted, with escape sequences).
 type String struct {
 	Value string
 }
 
-func (String) isBareItem() {}
+func (String) isBareItem() {
+	// marker method: seals BareItem to types defined in this package
+}
 
 // Token represents a token bare item (unquoted identifier).
 type Token struct {
 	Value string
 }
 
-func (Token) isBareItem() {}
+func (Token) isBareItem() {
+	// marker method: seals BareItem to types defined in this package
+}
 
 // ByteSequence represents a byte sequence bare item (:base64:).
 type ByteSequence struct {
 	Value []byte
 }
 
-func (ByteSequence) isBareItem() {}
+func (ByteSequence) isBareItem() {
+	// marker method: seals BareItem to types defined in this package
+}

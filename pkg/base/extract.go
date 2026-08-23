@@ -30,46 +30,48 @@ func normalizeLineFolding(s string) (string, error) {
 
 	i := 0
 	for i < len(s) {
-		// Check for CRLF or LF followed by whitespace
-		if s[i] == '\r' && i+1 < len(s) && s[i+1] == '\n' {
-			// Found CRLF
-			if i+2 < len(s) && (s[i+2] == ' ' || s[i+2] == '\t') {
-				// CRLF followed by whitespace - this is obs-fold
-				// Skip CRLF and all following whitespace, replace with single space
-				i += 2 // Skip \r\n
-				for i < len(s) && (s[i] == ' ' || s[i] == '\t') {
-					i++
-				}
-				result.WriteByte(' ')
-			} else {
-				// CRLF not followed by whitespace - reject as invalid
-				return "", fmt.Errorf("invalid header value: bare CRLF not part of obs-fold")
-			}
-		} else if s[i] == '\r' {
-			// Bare CR without LF - reject as invalid
-			return "", fmt.Errorf("invalid header value: bare CR not part of obs-fold")
-		} else if s[i] == '\n' {
-			// Found LF (without CR)
-			if i+1 < len(s) && (s[i+1] == ' ' || s[i+1] == '\t') {
-				// LF followed by whitespace - this is obs-fold
-				// Skip LF and all following whitespace, replace with single space
-				i++ // Skip \n
-				for i < len(s) && (s[i] == ' ' || s[i] == '\t') {
-					i++
-				}
-				result.WriteByte(' ')
-			} else {
-				// LF not followed by whitespace - reject as invalid
-				return "", fmt.Errorf("invalid header value: bare LF not part of obs-fold")
-			}
-		} else {
-			// Regular character
+		if s[i] != '\r' && s[i] != '\n' {
 			result.WriteByte(s[i])
 			i++
+			continue
 		}
+
+		next, err := skipObsFold(s, i)
+		if err != nil {
+			return "", err
+		}
+		result.WriteByte(' ')
+		i = next
 	}
 
 	return result.String(), nil
+}
+
+// skipObsFold consumes a CRLF or LF newline at s[i] together with any
+// following whitespace, per the obs-fold grammar in RFC 9421 Section 2.1.
+// It returns the index immediately after the fold. A newline not followed
+// by whitespace is rejected: bare newlines in header values could allow
+// signature base injection attacks.
+func skipObsFold(s string, i int) (int, error) {
+	newlineLen := 1
+	kind := "LF"
+	if s[i] == '\r' {
+		kind = "CRLF"
+		if i+1 >= len(s) || s[i+1] != '\n' {
+			return 0, fmt.Errorf("invalid header value: bare CR not part of obs-fold")
+		}
+		newlineLen = 2
+	}
+
+	j := i + newlineLen
+	if j >= len(s) || (s[j] != ' ' && s[j] != '\t') {
+		return 0, fmt.Errorf("invalid header value: bare %s not part of obs-fold", kind)
+	}
+
+	for j < len(s) && (s[j] == ' ' || s[j] == '\t') {
+		j++
+	}
+	return j, nil
 }
 
 // extractComponentValue extracts the canonicalized value for a component identifier.
@@ -86,41 +88,9 @@ func normalizeLineFolding(s string) (string, error) {
 // - A derived component is not valid for the message type (e.g., @status on request)
 // - The 'req' parameter is used but no related request is available
 func extractComponentValue(msg HTTPMessage, comp parser.ComponentIdentifier) (string, error) {
-	// Check for 'req' parameter - allows accessing request components from response signature
-	hasReqParam := false
-	for _, param := range comp.Parameters {
-		if param.Key == "req" {
-			if boolVal, ok := param.Value.(parser.Boolean); ok && boolVal.Value {
-				hasReqParam = true
-				break
-			}
-		}
-	}
-
-	// If 'req' parameter is present, extract from related request instead
-	if hasReqParam {
-		if !msg.IsResponse() {
-			return "", fmt.Errorf("'req' parameter is only valid for response signatures")
-		}
-
-		relatedReq := msg.RelatedRequest()
-		if relatedReq == nil {
-			return "", fmt.Errorf("'req' parameter specified but no related request available")
-		}
-
-		// Remove 'req' parameter before extracting from request
-		compForReq := parser.ComponentIdentifier{
-			Name:       comp.Name,
-			Type:       comp.Type,
-			Parameters: make([]parser.Parameter, 0, len(comp.Parameters)-1),
-		}
-		for _, param := range comp.Parameters {
-			if param.Key != "req" {
-				compForReq.Parameters = append(compForReq.Parameters, param)
-			}
-		}
-
-		return extractComponentValue(relatedReq, compForReq)
+	// 'req' parameter allows accessing request components from a response signature
+	if hasReqParameter(comp) {
+		return extractFromRelatedRequest(msg, comp)
 	}
 
 	switch comp.Type {
@@ -131,6 +101,46 @@ func extractComponentValue(msg HTTPMessage, comp parser.ComponentIdentifier) (st
 	default:
 		return "", fmt.Errorf("unknown component type: %v", comp.Type)
 	}
+}
+
+// hasReqParameter reports whether the component identifier carries a
+// truthy 'req' parameter, per RFC 9421 Section 2.4.
+func hasReqParameter(comp parser.ComponentIdentifier) bool {
+	for _, param := range comp.Parameters {
+		if param.Key != "req" {
+			continue
+		}
+		boolVal, ok := param.Value.(parser.Boolean)
+		return ok && boolVal.Value
+	}
+	return false
+}
+
+// extractFromRelatedRequest resolves a component carrying a 'req' parameter
+// against the response's related request, per RFC 9421 Section 2.4.
+func extractFromRelatedRequest(msg HTTPMessage, comp parser.ComponentIdentifier) (string, error) {
+	if !msg.IsResponse() {
+		return "", fmt.Errorf("'req' parameter is only valid for response signatures")
+	}
+
+	relatedReq := msg.RelatedRequest()
+	if relatedReq == nil {
+		return "", fmt.Errorf("'req' parameter specified but no related request available")
+	}
+
+	// Remove 'req' parameter before extracting from request
+	compForReq := parser.ComponentIdentifier{
+		Name:       comp.Name,
+		Type:       comp.Type,
+		Parameters: make([]parser.Parameter, 0, len(comp.Parameters)-1),
+	}
+	for _, param := range comp.Parameters {
+		if param.Key != "req" {
+			compForReq.Parameters = append(compForReq.Parameters, param)
+		}
+	}
+
+	return extractComponentValue(relatedReq, compForReq)
 }
 
 // extractHTTPFieldValue extracts HTTP field values per RFC 9421 Section 2.1.
@@ -346,109 +356,142 @@ func getRequestURL(msg HTTPMessage, compName string) (*url.URL, error) {
 func extractDerivedComponentValue(msg HTTPMessage, comp parser.ComponentIdentifier) (string, error) {
 	switch comp.Name {
 	case "@method":
-		if !msg.IsRequest() {
-			return "", fmt.Errorf("@method is only valid for requests")
-		}
-		method, err := msg.Method()
-		if err != nil {
-			return "", fmt.Errorf("@method: %w", err)
-		}
-		return method, nil
-
+		return extractMethod(msg)
 	case "@target-uri":
-		u, err := getRequestURL(msg, "@target-uri")
-		if err != nil {
-			return "", err
-		}
-		return u.String(), nil
-
+		return extractTargetURI(msg)
 	case "@authority":
-		u, err := getRequestURL(msg, "@authority")
-		if err != nil {
-			return "", err
-		}
-		return u.Host, nil
-
+		return extractAuthority(msg)
 	case "@scheme":
-		u, err := getRequestURL(msg, "@scheme")
-		if err != nil {
-			return "", err
-		}
-		return u.Scheme, nil
-
+		return extractScheme(msg)
 	case "@request-target":
-		u, err := getRequestURL(msg, "@request-target")
-		if err != nil {
-			return "", err
-		}
-		path := u.EscapedPath()
-		if path == "" {
-			path = "/"
-		}
-		if u.RawQuery != "" {
-			return path + "?" + u.RawQuery, nil
-		}
-		return path, nil
-
+		return extractRequestTarget(msg)
 	case "@path":
-		u, err := getRequestURL(msg, "@path")
-		if err != nil {
-			return "", err
-		}
-		path := u.EscapedPath()
-		// RFC 9421 Section 2.2.6: an empty path string is normalized as a single slash (/) character
-		if path == "" {
-			return "/", nil
-		}
-		return path, nil
-
+		return extractPath(msg)
 	case "@query":
-		u, err := getRequestURL(msg, "@query")
-		if err != nil {
-			return "", err
-		}
-		if u.RawQuery == "" {
-			return "?", nil
-		}
-		return "?" + u.RawQuery, nil
-
+		return extractQuery(msg)
 	case "@query-param":
-		// RFC 9421 Section 2.2.8: Requires 'name' parameter
-		var paramName string
-		for _, param := range comp.Parameters {
-			if param.Key == "name" {
-				if strVal, ok := param.Value.(parser.String); ok {
-					paramName = strVal.Value
-					break
-				}
-			}
-		}
-		if paramName == "" {
-			return "", fmt.Errorf("@query-param requires 'name' parameter")
-		}
-
-		u, err := getRequestURL(msg, "@query-param")
-		if err != nil {
-			return "", err
-		}
-		values := u.Query()[paramName]
-		if len(values) == 0 {
-			return "", fmt.Errorf("query parameter %q not found", paramName)
-		}
-		// RFC 9421: Only returns first value if multiple exist
-		return values[0], nil
-
+		return extractQueryParam(msg, comp)
 	case "@status":
-		if !msg.IsResponse() {
-			return "", fmt.Errorf("@status is only valid for responses")
-		}
-		statusCode, err := msg.StatusCode()
-		if err != nil {
-			return "", fmt.Errorf("@status: %w", err)
-		}
-		return strconv.Itoa(statusCode), nil
-
+		return extractStatus(msg)
 	default:
 		return "", fmt.Errorf("unknown derived component: %s", comp.Name)
 	}
+}
+
+func extractMethod(msg HTTPMessage) (string, error) {
+	if !msg.IsRequest() {
+		return "", fmt.Errorf("@method is only valid for requests")
+	}
+	method, err := msg.Method()
+	if err != nil {
+		return "", fmt.Errorf("@method: %w", err)
+	}
+	return method, nil
+}
+
+func extractTargetURI(msg HTTPMessage) (string, error) {
+	u, err := getRequestURL(msg, "@target-uri")
+	if err != nil {
+		return "", err
+	}
+	return u.String(), nil
+}
+
+func extractAuthority(msg HTTPMessage) (string, error) {
+	u, err := getRequestURL(msg, "@authority")
+	if err != nil {
+		return "", err
+	}
+	return u.Host, nil
+}
+
+func extractScheme(msg HTTPMessage) (string, error) {
+	u, err := getRequestURL(msg, "@scheme")
+	if err != nil {
+		return "", err
+	}
+	return u.Scheme, nil
+}
+
+func extractRequestTarget(msg HTTPMessage) (string, error) {
+	u, err := getRequestURL(msg, "@request-target")
+	if err != nil {
+		return "", err
+	}
+	path := u.EscapedPath()
+	if path == "" {
+		path = "/"
+	}
+	if u.RawQuery != "" {
+		return path + "?" + u.RawQuery, nil
+	}
+	return path, nil
+}
+
+func extractPath(msg HTTPMessage) (string, error) {
+	u, err := getRequestURL(msg, "@path")
+	if err != nil {
+		return "", err
+	}
+	path := u.EscapedPath()
+	// RFC 9421 Section 2.2.6: an empty path string is normalized as a single slash (/) character
+	if path == "" {
+		return "/", nil
+	}
+	return path, nil
+}
+
+func extractQuery(msg HTTPMessage) (string, error) {
+	u, err := getRequestURL(msg, "@query")
+	if err != nil {
+		return "", err
+	}
+	if u.RawQuery == "" {
+		return "?", nil
+	}
+	return "?" + u.RawQuery, nil
+}
+
+func extractQueryParam(msg HTTPMessage, comp parser.ComponentIdentifier) (string, error) {
+	// RFC 9421 Section 2.2.8: Requires 'name' parameter
+	paramName := queryParamName(comp)
+	if paramName == "" {
+		return "", fmt.Errorf("@query-param requires 'name' parameter")
+	}
+
+	u, err := getRequestURL(msg, "@query-param")
+	if err != nil {
+		return "", err
+	}
+	values := u.Query()[paramName]
+	if len(values) == 0 {
+		return "", fmt.Errorf("query parameter %q not found", paramName)
+	}
+	// RFC 9421: Only returns first value if multiple exist
+	return values[0], nil
+}
+
+// queryParamName extracts the required 'name' parameter for @query-param,
+// per RFC 9421 Section 2.2.8.
+func queryParamName(comp parser.ComponentIdentifier) string {
+	for _, param := range comp.Parameters {
+		if param.Key != "name" {
+			continue
+		}
+		if strVal, ok := param.Value.(parser.String); ok {
+			return strVal.Value
+		}
+	}
+	return ""
+}
+
+func extractStatus(msg HTTPMessage) (string, error) {
+	if !msg.IsResponse() {
+		return "", fmt.Errorf("@status is only valid for responses")
+	}
+	statusCode, err := msg.StatusCode()
+	if err != nil {
+		return "", fmt.Errorf("@status: %w", err)
+	}
+	return strconv.Itoa(statusCode), nil
 }

@@ -39,45 +39,66 @@ func ValidateSignatureParams(params SignatureParams, opts SignatureParamsValidat
 		return fmt.Errorf("created not-older-than must be >= 0")
 	}
 
-	needsCreated := opts.RequireCreated || opts.CreatedNotNewerThan > 0 || opts.CreatedNotOlderThan > 0
+	now := resolveValidationNow(opts)
+
+	createdTime, err := validateCreatedParam(params, opts, now)
+	if err != nil {
+		return err
+	}
+
+	return validateExpiresParam(params, opts, now, createdTime)
+}
+
+// resolveValidationNow returns the reference time for validation, defaulting
+// to time.Now() when opts.Now is unset and a time reference is actually needed.
+func resolveValidationNow(opts SignatureParamsValidationOptions) time.Time {
 	needsNow := opts.CreatedNotNewerThan > 0 || opts.CreatedNotOlderThan > 0 || opts.RejectExpired
-
-	var now time.Time
-	if needsNow {
-		now = opts.Now
-		if now.IsZero() {
-			now = time.Now()
-		}
+	if !needsNow {
+		return time.Time{}
 	}
+	if !opts.Now.IsZero() {
+		return opts.Now
+	}
+	return time.Now()
+}
 
-	var createdTime time.Time
+// validateCreatedParam validates the "created" parameter and returns its
+// parsed time (zero if absent) for use by validateExpiresParam.
+func validateCreatedParam(params SignatureParams, opts SignatureParamsValidationOptions, now time.Time) (time.Time, error) {
 	if params.Created == nil {
+		needsCreated := opts.RequireCreated || opts.CreatedNotNewerThan > 0 || opts.CreatedNotOlderThan > 0
 		if needsCreated {
-			return fmt.Errorf("missing \"created\" parameter")
+			return time.Time{}, fmt.Errorf("missing \"created\" parameter")
 		}
-	} else {
-		createdTime = time.Unix(*params.Created, 0)
-		if opts.CreatedNotNewerThan > 0 && createdTime.After(now.Add(opts.CreatedNotNewerThan)) {
-			return fmt.Errorf("created time is too far in the future")
-		}
-		if opts.CreatedNotOlderThan > 0 && createdTime.Add(opts.CreatedNotOlderThan).Before(now) {
-			return fmt.Errorf("created time is too old")
-		}
+		return time.Time{}, nil
 	}
 
+	createdTime := time.Unix(*params.Created, 0)
+	if opts.CreatedNotNewerThan > 0 && createdTime.After(now.Add(opts.CreatedNotNewerThan)) {
+		return time.Time{}, fmt.Errorf("created time is too far in the future")
+	}
+	if opts.CreatedNotOlderThan > 0 && createdTime.Add(opts.CreatedNotOlderThan).Before(now) {
+		return time.Time{}, fmt.Errorf("created time is too old")
+	}
+	return createdTime, nil
+}
+
+// validateExpiresParam validates the "expires" parameter against now and,
+// optionally, the already-validated created time.
+func validateExpiresParam(params SignatureParams, opts SignatureParamsValidationOptions, now, createdTime time.Time) error {
 	if params.Expires == nil {
 		if opts.RequireExpires {
 			return fmt.Errorf("missing \"expires\" parameter")
 		}
-	} else {
-		expiresTime := time.Unix(*params.Expires, 0)
-		if opts.RejectExpired && now.After(expiresTime) {
-			return fmt.Errorf("signature is expired")
-		}
-		if opts.ExpiresNotBeforeCreated && params.Created != nil && expiresTime.Before(createdTime) {
-			return fmt.Errorf("expires time is before created time")
-		}
+		return nil
 	}
 
+	expiresTime := time.Unix(*params.Expires, 0)
+	if opts.RejectExpired && now.After(expiresTime) {
+		return fmt.Errorf("signature is expired")
+	}
+	if opts.ExpiresNotBeforeCreated && params.Created != nil && expiresTime.Before(createdTime) {
+		return fmt.Errorf("expires time is before created time")
+	}
 	return nil
 }

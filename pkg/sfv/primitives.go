@@ -87,25 +87,14 @@ func (p *Parser) parseString() (string, error) {
 		c := p.data[p.offset]
 
 		if c == '"' {
-			// End of string
-			val := p.data[start:p.offset]
-			p.offset++ // consume closing quote
-
-			if !hasEscapes {
-				// Optimization: zero-copy substring if no escapes
-				return val, nil
-			}
-
-			// Slow path: handle escapes
-			return p.decodeString(val)
+			return p.finishString(start, hasEscapes)
 		}
 
 		if c == '\\' {
-			hasEscapes = true
-			p.offset++ // skip backslash
-			if p.isEOF() {
-				return "", p.newParseError("unexpected EOF after backslash")
+			if err := p.consumeEscapeMarker(); err != nil {
+				return "", err
 			}
+			hasEscapes = true
 		} else if c < 0x20 || c > 0x7E {
 			// Control characters and non-ASCII not allowed
 			return "", p.newParseError("invalid character in string (must be printable ASCII)")
@@ -119,6 +108,31 @@ func (p *Parser) parseString() (string, error) {
 				p.offset-start, p.limits.MaxStringLength))
 		}
 	}
+}
+
+// finishString completes string parsing at the closing quote, decoding
+// escape sequences if any were seen.
+func (p *Parser) finishString(start int, hasEscapes bool) (string, error) {
+	val := p.data[start:p.offset]
+	p.offset++ // consume closing quote
+
+	if !hasEscapes {
+		// Optimization: zero-copy substring if no escapes
+		return val, nil
+	}
+
+	// Slow path: handle escapes
+	return p.decodeString(val)
+}
+
+// consumeEscapeMarker skips the backslash of an escape sequence, ensuring
+// the input does not end immediately after it.
+func (p *Parser) consumeEscapeMarker() error {
+	p.offset++ // skip backslash
+	if p.isEOF() {
+		return p.newParseError("unexpected EOF after backslash")
+	}
+	return nil
 }
 
 // decodeString handles escape sequences in SFV strings.

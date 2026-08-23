@@ -200,39 +200,23 @@ func (v *Verifier) verifyMessage(ctx context.Context, msg base.HTTPMessage, head
 }
 
 func (v *Verifier) resolveKeyAndAlgorithm(ctx context.Context, label string, params parser.SignatureParams) (any, string, error) {
-	algID := v.algorithm
-	if params.Algorithm != nil {
-		if algID != "" && algID != *params.Algorithm {
-			return nil, "", fmt.Errorf("algorithm mismatch between options and signature parameters")
-		}
-		if algID == "" {
-			algID = *params.Algorithm
-		}
+	algID, err := v.initialAlgorithm(params)
+	if err != nil {
+		return nil, "", err
 	}
 
-	var key any
-	var resolvedAlg string
-	var err error
-	if v.keyResolver != nil {
-		key, resolvedAlg, err = v.keyResolver.ResolveKey(ctx, label, params)
-		if err != nil {
-			return nil, "", err
-		}
-	} else {
-		key = v.key
+	key, resolvedAlg, err := v.resolveKey(ctx, label, params)
+	if err != nil {
+		return nil, "", err
 	}
-
 	if key == nil {
 		return nil, "", fmt.Errorf("verification key is required")
 	}
 
-	if resolvedAlg != "" {
-		if algID != "" && algID != resolvedAlg {
-			return nil, "", fmt.Errorf("algorithm mismatch between resolver and signature parameters")
-		}
-		algID = resolvedAlg
+	algID, err = mergeResolvedAlgorithm(algID, resolvedAlg)
+	if err != nil {
+		return nil, "", err
 	}
-
 	if algID == "" {
 		return nil, "", fmt.Errorf("algorithm is required for verification")
 	}
@@ -244,6 +228,42 @@ func (v *Verifier) resolveKeyAndAlgorithm(ctx context.Context, label string, par
 	}
 
 	return key, algID, nil
+}
+
+// initialAlgorithm resolves the algorithm ID from the verifier's configured
+// algorithm and the signature parameters, rejecting a mismatch between them.
+func (v *Verifier) initialAlgorithm(params parser.SignatureParams) (string, error) {
+	algID := v.algorithm
+	if params.Algorithm != nil {
+		if algID != "" && algID != *params.Algorithm {
+			return "", fmt.Errorf("algorithm mismatch between options and signature parameters")
+		}
+		if algID == "" {
+			algID = *params.Algorithm
+		}
+	}
+	return algID, nil
+}
+
+// resolveKey looks up the verification key, either via the configured
+// key resolver (which may also report an algorithm) or the static key.
+func (v *Verifier) resolveKey(ctx context.Context, label string, params parser.SignatureParams) (any, string, error) {
+	if v.keyResolver != nil {
+		return v.keyResolver.ResolveKey(ctx, label, params)
+	}
+	return v.key, "", nil
+}
+
+// mergeResolvedAlgorithm reconciles the algorithm ID known so far with one
+// reported by the key resolver, rejecting a mismatch between them.
+func mergeResolvedAlgorithm(algID, resolvedAlg string) (string, error) {
+	if resolvedAlg == "" {
+		return algID, nil
+	}
+	if algID != "" && algID != resolvedAlg {
+		return "", fmt.Errorf("algorithm mismatch between resolver and signature parameters")
+	}
+	return resolvedAlg, nil
 }
 
 func (v *Verifier) validateRequiredComponents(covered []parser.ComponentIdentifier) error {
