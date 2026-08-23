@@ -38,63 +38,72 @@ request) and was unsafe if a single `Verifier` were reused across concurrent
 goroutines, a normal pattern for an HTTP server. That cache was removed for
 correctness; see commit `514b021`.
 
+**ECDSA encoding**: igor-pavlenko's ECDSA signatures use RFC 9421's required
+fixed-length `r||s` concatenation rather than Go's ASN.1 DER encoding — DER
+signatures were unverifiable by any conformant RFC 9421 implementation. This
+was fixed in commit `b8e49c8`; the numbers below reflect the raw-concat path.
+Measured cost is within noise of the earlier DER numbers — avoiding ASN.1
+marshaling doesn't move the needle much against the dominant P-256 scalar
+multiplication cost.
+
 ## Results
 
 Verify-side numbers below reflect `Verifier`'s current, concurrency-safe
-behavior — see the Verifier caching note under Methodology.
+behavior — see the Verifier caching note under Methodology. ECDSA numbers
+reflect the raw `r||s` encoding — see the ECDSA encoding note above.
 
 ### Sign Performance (ns/op, lower is better)
 
 | Algorithm | igor-pavlenko | yaronf | remitly | common-fate |
 |-----------|----------|--------|---------|-------------|
-| RSA-PSS-SHA512 | 858,725 | **858,405** | 859,531 | 860,759 |
-| ECDSA-P256-SHA256 | **24,873** | 27,923 | 27,378 | 28,950 |
-| HMAC-SHA256 | **2,289** | 4,354 | 4,585 | 6,053 |
+| RSA-PSS-SHA512 | 865,057 | 868,062 | **861,428** | 862,980 |
+| ECDSA-P256-SHA256 | **25,373** | 28,308 | 27,663 | 29,678 |
+| HMAC-SHA256 | **2,357** | 4,431 | 4,639 | 6,133 |
 
 RSA-PSS-SHA512 signing is dominated by the underlying `crypto/rsa` PSS
 operation itself (all four libraries call into the same stdlib primitive), so
-the four implementations land within noise of each other (<0.3% apart) rather
+the four implementations land within noise of each other (<1% apart) rather
 than showing a meaningful gap.
 
 ### HMAC + Content-Digest (10MB) Sign Performance
 
 | Metric | igor-pavlenko | yaronf | remitly | common-fate |
 |--------|----------|--------|---------|-------------|
-| ns/op | **4,254,302** | 6,483,419 | 5,356,249 | 5,276,643 |
-| MB/s | **2,465** | 1,617 | 1,958 | 1,987 |
-| B/op | **8,857** | 54,541,529 | 33,570,723 | 33,572,268 |
+| ns/op | **4,311,291** | 6,653,874 | 5,425,723 | 5,347,823 |
+| MB/s | **2,432** | 1,576 | 1,933 | 1,961 |
+| B/op | **8,857** | 54,541,529 | 33,570,689 | 33,572,261 |
 | allocs/op | **55** | 172 | 184 | 182 |
 
 ### Sign Memory (B/op, lower is better)
 
 | Algorithm | igor-pavlenko | yaronf | remitly | common-fate |
 |-----------|----------|--------|---------|-------------|
-| RSA-PSS-SHA512 | **8,923** | 12,058 | 12,186 | 14,389 |
-| ECDSA-P256-SHA256 | **13,300** | 17,145 | 17,071 | 19,239 |
-| HMAC-SHA256 | **7,594** | 10,729 | 11,153 | 14,757 |
+| RSA-PSS-SHA512 | **8,923** | 12,058 | 12,185 | 14,389 |
+| ECDSA-P256-SHA256 | **13,557** | 17,145 | 17,071 | 19,239 |
+| HMAC-SHA256 | **7,594** | 10,729 | 11,154 | 14,758 |
 
 ### Sign Allocations (allocs/op, lower is better)
 
 | Algorithm | igor-pavlenko | yaronf | remitly | common-fate |
 |-----------|----------|--------|---------|-------------|
 | RSA-PSS-SHA512 | **44** | 107 | 119 | 126 |
-| ECDSA-P256-SHA256 | **95** | 173 | 174 | 181 |
+| ECDSA-P256-SHA256 | **100** | 173 | 174 | 181 |
 | HMAC-SHA256 | **42** | 105 | 116 | 124 |
 
 ### Verify Performance (ns/op, lower is better)
 
 | Algorithm | igor-pavlenko | yaronf | remitly | common-fate |
 |-----------|----------|--------|---------|-------------|
-| RSA-PSS-SHA512 | **30,578** | 34,868 | 31,999 | 33,165 |
-| ECDSA-P256-SHA256 | **57,480** | 61,433 | 58,888 | 60,234 |
-| HMAC-SHA256 | **2,168** | 5,881 | 3,391 | 5,241 |
+| RSA-PSS-SHA512 | **30,709** | 35,341 | 33,519 | 33,486 |
+| ECDSA-P256-SHA256 | **58,243** | 63,296 | 60,676 | 60,309 |
+| HMAC-SHA256 | **2,381** | 6,487 | 3,440 | 5,283 |
 
 ### Verify Memory (B/op, lower is better)
 
 | Algorithm | igor-pavlenko | yaronf | remitly | common-fate |
 |-----------|----------|--------|---------|-------------|
 | RSA-PSS-SHA512 | **5,688** | 11,541 | 6,939 | 9,248 |
-| ECDSA-P256-SHA256 | **4,504** | 10,244 | 6,362 | 8,712 |
+| ECDSA-P256-SHA256 | **5,208** | 10,244 | 6,362 | 8,712 |
 | HMAC-SHA256 | **4,408** | 9,412 | 5,658 | 8,888 |
 
 ### Verify Allocations (allocs/op, lower is better)
@@ -102,7 +111,7 @@ than showing a meaningful gap.
 | Algorithm | igor-pavlenko | yaronf | remitly | common-fate |
 |-----------|----------|--------|---------|-------------|
 | RSA-PSS-SHA512 | **58** | 184 | 119 | 126 |
-| ECDSA-P256-SHA256 | **54** | 190 | 125 | 133 |
+| ECDSA-P256-SHA256 | **67** | 190 | 125 | 133 |
 | HMAC-SHA256 | **50** | 176 | 111 | 118 |
 
 ## Visual Summary
@@ -112,64 +121,66 @@ Bars are scaled per algorithm to the slowest library (40 columns).
 ```
 Sign (ns/op, lower is better)
   RSA-PSS-SHA512
-    igor-pavlenko ######################################## 858725
-    yaronf        ######################################## 858405
-    remitly       ######################################## 859531
-    common-fate   ######################################## 860759
+    igor-pavlenko ######################################## 865057
+    yaronf        ######################################## 868062
+    remitly       ######################################## 861428
+    common-fate   ######################################## 862980
 
   ECDSA-P256-SHA256
-    igor-pavlenko ##################################       24873
-    yaronf        ######################################## 27923
-    remitly       ######################################   27378
-    common-fate   ######################################## 28950
+    igor-pavlenko ##################################       25373
+    yaronf        ######################################## 28308
+    remitly       #####################################    27663
+    common-fate   ######################################## 29678
 
   HMAC-SHA256
-    igor-pavlenko ###############                          2289
-    yaronf        #############################            4354
-    remitly       ##############################           4585
-    common-fate   ######################################## 6053
+    igor-pavlenko ###############                          2357
+    yaronf        #############################            4431
+    remitly       ##############################           4639
+    common-fate   ######################################## 6133
 
 Sign HMAC + Content-Digest (10MB)
-    igor-pavlenko ##########################               4254302
-    yaronf        ######################################## 6483419
-    remitly       #################################        5356249
-    common-fate   #################################        5276643
+    igor-pavlenko ##########################               4311291
+    yaronf        ######################################## 6653874
+    remitly       #################################        5425723
+    common-fate   ################################         5347823
 
 Verify (ns/op, lower is better)
   RSA-PSS-SHA512
-    igor-pavlenko ###################################      30578
-    yaronf        ######################################## 34868
-    remitly       #####################################    31999
-    common-fate   ######################################## 33165
+    igor-pavlenko ###################################      30709
+    yaronf        ######################################## 35341
+    remitly       ######################################   33519
+    common-fate   ######################################## 33486
 
   ECDSA-P256-SHA256
-    igor-pavlenko #####################################    57480
-    yaronf        ######################################## 61433
-    remitly       ######################################   58888
-    common-fate   ######################################## 60234
+    igor-pavlenko #####################################    58243
+    yaronf        ######################################## 63296
+    remitly       ######################################   60676
+    common-fate   ######################################## 60309
 
   HMAC-SHA256
-    igor-pavlenko ###############                          2168
-    yaronf        ######################################## 5881
-    remitly       #######################                  3391
-    common-fate   ####################################     5241
+    igor-pavlenko ###############                          2381
+    yaronf        ######################################## 6487
+    remitly       #####################                    3440
+    common-fate   #################################        5283
 ```
 
 ## Key Observations
 
 ### Performance
-- **RSA-PSS Sign**: all four libraries land within ~0.3% of each other — the RSA-PSS
+- **RSA-PSS Sign**: all four libraries land within ~1% of each other — the RSA-PSS
   `crypto/rsa` call dominates cost, leaving no meaningful gap between implementations.
-- **RSA-PSS Verify**: igor-pavlenko ~5-14% faster
-- **ECDSA Sign**: igor-pavlenko ~10-16% faster
-- **ECDSA Verify**: igor-pavlenko ~2-7% faster
+- **RSA-PSS Verify**: igor-pavlenko ~8-13% faster
+- **ECDSA Sign**: igor-pavlenko ~8-15% faster
+- **ECDSA Verify**: igor-pavlenko ~3-8% faster
 - **HMAC Sign**: igor-pavlenko ~1.9-2.6x faster
-- **HMAC Verify**: igor-pavlenko ~1.6-2.7x faster
+- **HMAC Verify**: igor-pavlenko ~1.4-2.7x faster
 
 ### Memory Efficiency
-- igor-pavlenko uses **1.2x-2.3x less memory** than alternatives in the hot path.
-- igor-pavlenko makes **1.8x-3.5x fewer allocations** during signing and verification.
-- large-body digest: igor-pavlenko stays **~9 KB/op** vs **33-54 MB/op** for others (full body buffering).
+- igor-pavlenko uses **1.3x-1.9x less memory** than alternatives in the sign-side hot path,
+  and **1.2x-2.1x less** on verify.
+- igor-pavlenko makes **1.7x-3.0x fewer allocations** when signing and **1.9x-3.5x fewer**
+  when verifying.
+- large-body digest: igor-pavlenko stays **~9 KB/op** vs **33-55 MB/op** for others (full body buffering).
 - Verify-side memory/allocation savings are smaller than in previous results because
   `Verifier` no longer caches Signature-Input parsing between calls (see note above) —
   each call now does the full parse, same as the other libraries.

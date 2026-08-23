@@ -474,17 +474,18 @@ Compared against other Go RFC 9421 implementations ([yaronf/httpsign](https://gi
 
 | Metric | Sign | Verify |
 |--------|------|--------|
-| **RSA-PSS-SHA512** | within noise (~0.3%) | 5-14% faster |
-| **ECDSA-P256** | 10-16% faster | 2-7% faster |
-| **HMAC-SHA256** | 1.9-2.6x faster | 1.6-2.7x faster |
-| **Memory usage** | 1.2-1.9x less | 1.2-2.3x less |
-| **Allocations** | 1.8-2.9x fewer | 2.0-3.5x fewer |
+| **RSA-PSS-SHA512** | within noise (~1%) | 8-13% faster |
+| **ECDSA-P256** | 8-15% faster | 3-8% faster |
+| **HMAC-SHA256** | 1.9-2.6x faster | 1.4-2.7x faster |
+| **Memory usage** | 1.3-1.9x less | 1.2-2.1x less |
+| **Allocations** | 1.7-3.0x fewer | 1.9-3.5x fewer |
 
 RSA-PSS signing is dominated by the shared `crypto/rsa` operation itself, so all
 four libraries land within noise of each other there. Verify-side memory and
 allocation savings are narrower than earlier results because `Verifier` no
 longer caches Signature-Input parsing between calls — a correctness fix for
-concurrent use (see [benchmarks/README.md](benchmarks/README.md)).
+concurrent use. ECDSA signatures use RFC 9421's required fixed-length `r||s`
+encoding rather than ASN.1 DER (see [benchmarks/README.md](benchmarks/README.md)).
 
 ### Efficiency Visualization
 
@@ -494,10 +495,10 @@ gantt
     dateFormat  X
     axisFormat %s
     section ns/op
-    igor-pavlenko (2168)      :0, 2168
-    remitly (3391)      :0, 3391
-    common-fate (5241)  :0, 5241
-    yaronf (5881)        :0, 5881
+    igor-pavlenko (2381)      :0, 2381
+    remitly (3440)      :0, 3440
+    common-fate (5283)  :0, 5283
+    yaronf (6487)        :0, 6487
 ```
 
 See [benchmarks/README.md](benchmarks/README.md) for detailed results and methodology.
