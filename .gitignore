@@ -1,0 +1,49 @@
+# Go build outputs
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# Go workspace file
+go.work
+
+# Test coverage
+*.coverprofile
+coverage.txt
+coverage.html
+
+# Profiling
+*.prof
+*.pprof
+mem.prof
+cpu.prof
+
+# Binaries
+bin/
+dist/
+
+# IDE and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Temporary files
+*.tmp
+*.log
+*.bak
+
+# Build artifacts
+build/

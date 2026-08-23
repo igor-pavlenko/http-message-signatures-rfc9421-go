@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/go-format.sh",
+            "timeout": 120,
+            "statusMessage": "Formatting Go code..."
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/go-lint-stop.sh",
+            "timeout": 120,
+            "statusMessage": "Verifying lint passes..."
+          },
+          {
+            "type": "command",
+            "command": "go fix ./...",
+            "timeout": 120,
+            "statusMessage": "Using go fix to modernize Go code..."
+          }
+        ]
+      }
+    ]
+  }
+}

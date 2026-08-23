@@ -1,0 +1,68 @@
+version: "2"
+run:
+  modules-download-mode: readonly
+  tests: true
+linters:
+  enable:
+    - bodyclose
+    - errname
+    - errorlint
+    - exhaustive
+    - funlen
+    - gocyclo
+    - gosec
+    - misspell
+    - nestif
+    - nilerr
+    - nilnil
+    - nolintlint
+    - revive
+    - whitespace
+  settings:
+    funlen:
+      lines: 120
+      statements: 80
+    gocyclo:
+      min-complexity: 35
+    nestif:
+      min-complexity: 16
+    staticcheck:
+      checks:
+        - all
+        - -QF*  # Disable quickfix suggestions
+    revive:
+      rules:
+        - name: var-naming
+        - name: package-comments
+        - name: exported
+        - name: indent-error-flow
+        - name: error-return
+        - name: error-strings
+        - name: receiver-naming
+        - name: increment-decrement
+        - name: error-naming
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+    rules:
+      # Exclude funlen, gocyclo, nestif from test files (table-driven tests are naturally long)
+      - path: _test\.go
+        linters:
+          - funlen
+          - gocyclo
+          - nestif
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+formatters:
+  enable:
+    - gofmt
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
